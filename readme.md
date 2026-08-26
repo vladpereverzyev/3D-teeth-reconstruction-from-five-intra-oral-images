@@ -1,4 +1,4 @@
-# Smartee project: Model-based 3D Teeth Reconstruction from Five Intra-oral Orthodontic Photos
+# Smartee project: Model-based 3D Teeth Reconstruction from Five Intra-oral Orthodontic Photo
 
 ## preprocessing
 
