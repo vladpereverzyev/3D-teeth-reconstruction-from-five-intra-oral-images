@@ -161,13 +161,13 @@ document.getElementById('loadSample').addEventListener('click', ()=>{
 function refreshGo(){
   const ready = sampleTag || VIEWS.every(([v])=> files[v]);
   document.getElementById('go').disabled = !ready;
-  if(ready && !polling) setState('idle','Ready to reconstruct');
+  if(ready && !polling && !finished) setState('idle','Ready to reconstruct');
 }
 
 // ---- run ----
 const dot=document.getElementById('dot'), stateTxt=document.getElementById('stateTxt');
 const logEl=document.getElementById('log');
-let polling=false;
+let polling=false, finished=false;
 function setState(cls,txt){
   dot.className='dot'+(cls==='running'?' run':cls==='done'?' done':cls==='error'?' err':'');
   stateTxt.textContent=txt;
@@ -179,7 +179,7 @@ async function run(){
   else { VIEWS.forEach(([v])=> fd.append(v, files[v])); }
   document.getElementById('go').disabled=true;
   logEl.hidden=false; logEl.textContent='';
-  setState('running','Starting reconstruction...'); polling=true;
+  setState('running','Starting reconstruction...'); polling=true; finished=false;
   let job;
   try{
     const r = await fetch('/api/reconstruct',{method:'POST',body:fd});
@@ -194,8 +194,8 @@ async function poll(id){
     const s = await r.json();
     logEl.textContent = s.log || ''; logEl.scrollTop = logEl.scrollHeight;
     if(s.state==='running'){ setState('running','Reconstruction running...'); setTimeout(()=>poll(id),2000); return; }
-    polling=false;
-    if(s.state==='done'){ setState('done','Done'); loadMeshes(s.upper_url, s.lower_url); }
+    polling=false; finished=true;
+    if(s.state==='done'){ setState('done','Done — model ready'); loadMeshes(s.upper_url, s.lower_url); }
     else { setState('error','Reconstruction failed (see log)'); }
     refreshGo();
   }catch(e){ polling=false; setState('error','Network error: '+e.message); refreshGo(); }
