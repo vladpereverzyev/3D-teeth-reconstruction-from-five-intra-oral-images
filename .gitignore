@@ -4,3 +4,9 @@ __pycache__/
 *$py.class
 *.mat
 .pre-commit-config.yaml
+
+# Local Python 3.9 virtualenv for the web UI (rigenerabile, vedi webui/README.md)
+.venv/
+
+# webui: run locali (foto caricate + mesh generate), non vanno versionati
+webui/jobs/

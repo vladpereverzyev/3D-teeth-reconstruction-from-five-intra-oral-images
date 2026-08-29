@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Teeth Reconstruction - Test bench</title>
+<style>
+  :root{
+    --bg:#0f1418; --panel:#171e24; --panel2:#1e272e; --line:#2a353d;
+    --fg:#e8eef2; --muted:#8ba0ad; --accent:#31c3a6; --accent2:#2a9df4;
+    --danger:#e0564f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;
+       background:var(--bg);color:var(--fg);height:100vh;overflow:hidden}
+  .app{display:grid;grid-template-columns:380px 1fr;height:100vh}
+  .side{background:var(--panel);border-right:1px solid var(--line);
+        padding:16px;overflow-y:auto}
+  h1{font-size:16px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 16px}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;
+     color:var(--muted);margin:18px 0 8px}
+  .slots{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .slot{background:var(--panel2);border:1px dashed var(--line);border-radius:8px;
+        aspect-ratio:4/3;position:relative;overflow:hidden;cursor:pointer;
+        display:flex;align-items:center;justify-content:center;text-align:center}
+  .slot.filled{border-style:solid;border-color:var(--accent)}
+  .slot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .slot .lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);
+             font-size:11px;padding:2px 4px;z-index:2}
+  .slot .ph{color:var(--muted);font-size:11px;padding:6px;z-index:1}
+  .slot input{display:none}
+  .row{display:flex;gap:8px;align-items:center;margin-top:10px}
+  select,button{font:inherit}
+  select{background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+         border-radius:6px;padding:6px 8px;flex:1}
+  button{background:var(--accent);color:#06231d;border:0;border-radius:6px;
+         padding:8px 12px;font-weight:600;cursor:pointer}
+  button.ghost{background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+               font-weight:500}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .go{width:100%;margin-top:14px;padding:11px;font-size:15px}
+  .log{background:#0b0f12;border:1px solid var(--line);border-radius:6px;
+       padding:8px;font:11px/1.4 ui-monospace,Consolas,monospace;color:#9fb4c0;
+       white-space:pre-wrap;max-height:220px;overflow:auto;margin-top:10px}
+  .status{font-size:12px;margin-top:8px;display:flex;align-items:center;gap:6px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+  .dot.run{background:var(--accent2);animation:pulse 1s infinite}
+  .dot.done{background:var(--accent)} .dot.err{background:var(--danger)}
+  @keyframes pulse{50%{opacity:.3}}
+  .view{position:relative}
+  #canvas{width:100%;height:100vh;display:block}
+  .overlay{position:absolute;top:12px;right:12px;display:flex;gap:8px;flex-direction:column;align-items:flex-end}
+  .chip{background:rgba(23,30,36,.9);border:1px solid var(--line);border-radius:6px;
+        padding:6px 10px;font-size:12px;display:flex;gap:8px;align-items:center}
+  .chip label{display:flex;gap:5px;align-items:center;cursor:pointer;color:var(--muted)}
+  .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+         color:var(--muted);font-size:13px;text-align:center;padding:20px;pointer-events:none}
+  a.dl{color:var(--accent);text-decoration:none;font-size:12px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <h1>3D Teeth Reconstruction</h1>
+    <p class="sub">Test bench - 5 intra-oral photos &rarr; 3D model (CPU, a few minutes)</p>
+
+    <h2>1 · The 5 photos</h2>
+    <div class="slots" id="slots"></div>
+
+    <h2>or load a sample</h2>
+    <div class="row">
+      <select id="sampleSel"><option value="">Sample set...</option></select>
+      <button class="ghost" id="loadSample">Load</button>
+    </div>
+
+    <button class="go" id="go" disabled>Reconstruct</button>
+
+    <div class="status"><span class="dot" id="dot"></span><span id="stateTxt">Waiting for the photos</span></div>
+    <div class="log" id="log" hidden></div>
+  </aside>
+
+  <section class="view">
+    <canvas id="canvas"></canvas>
+    <div class="empty" id="empty">The 3D model will appear here after the reconstruction.</div>
+    <div class="overlay" id="overlay" hidden>
+      <div class="chip">
+        <label><input type="checkbox" id="tUpper" checked> Upper</label>
+        <label><input type="checkbox" id="tLower" checked> Lower</label>
+      </div>
+      <div class="chip">
+        <a class="dl" id="dlUpper" href="#" download>&darr; upper.obj</a>
+        <a class="dl" id="dlLower" href="#" download>&darr; lower.obj</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+const VIEWS = [
+  ['upper','Upper arch (occlusal)'],
+  ['lower','Lower arch (occlusal)'],
+  ['left','Left side'],
+  ['right','Right side'],
+  ['frontal','Frontal'],
+];
+const files = {};         // view -> File
+let sampleTag = null;     // set when using a sample set
+
+// ---- build photo slots ----
+const slotsEl = document.getElementById('slots');
+VIEWS.forEach(([v,label])=>{
+  const el = document.createElement('label');
+  el.className = 'slot'; el.dataset.view = v;
+  el.innerHTML = `<span class="ph">${label}</span>
+    <span class="lbl">${v}</span>
+    <input type="file" accept="image/*">`;
+  const input = el.querySelector('input');
+  input.addEventListener('change', e=>{
+    const f = e.target.files[0]; if(!f) return;
+    files[v] = f; sampleTag = null;
+    setSlotImage(el, URL.createObjectURL(f));
+    refreshGo();
+  });
+  slotsEl.appendChild(el);
+});
+function setSlotImage(el, src){
+  el.classList.add('filled');
+  let img = el.querySelector('img');
+  if(!img){ img = document.createElement('img'); el.appendChild(img); }
+  img.src = src;
+}
+function slotEl(v){ return slotsEl.querySelector(`.slot[data-view="${v}"]`); }
+
+// ---- samples ----
+const sampleSel = document.getElementById('sampleSel');
+fetch('/api/samples').then(r=>r.json()).then(tags=>{
+  tags.forEach(t=>{
+    const o=document.createElement('option'); o.value=t; o.textContent='Sample '+t;
+    sampleSel.appendChild(o);
+  });
+});
+document.getElementById('loadSample').addEventListener('click', ()=>{
+  const t = sampleSel.value; if(!t) return;
+  sampleTag = t;
+  for(const k in files) delete files[k];
+  VIEWS.forEach(([v])=> setSlotImage(slotEl(v), `/api/sample-image/${t}/${v}`));
+  refreshGo();
+});
+
+function refreshGo(){
+  const ready = sampleTag || VIEWS.every(([v])=> files[v]);
+  document.getElementById('go').disabled = !ready;
+  if(ready && !polling) setState('idle','Ready to reconstruct');
+}
+
+// ---- run ----
+const dot=document.getElementById('dot'), stateTxt=document.getElementById('stateTxt');
+const logEl=document.getElementById('log');
+let polling=false;
+function setState(cls,txt){
+  dot.className='dot'+(cls==='running'?' run':cls==='done'?' done':cls==='error'?' err':'');
+  stateTxt.textContent=txt;
+}
+document.getElementById('go').addEventListener('click', run);
+async function run(){
+  const fd = new FormData();
+  if(sampleTag){ fd.append('sample_tag', sampleTag); }
+  else { VIEWS.forEach(([v])=> fd.append(v, files[v])); }
+  document.getElementById('go').disabled=true;
+  logEl.hidden=false; logEl.textContent='';
+  setState('running','Starting reconstruction...'); polling=true;
+  let job;
+  try{
+    const r = await fetch('/api/reconstruct',{method:'POST',body:fd});
+    job = await r.json();
+    if(job.error){ throw new Error(job.error); }
+  }catch(e){ setState('error','Error: '+e.message); polling=false; refreshGo(); return; }
+  poll(job.job_id);
+}
+async function poll(id){
+  try{
+    const r = await fetch('/api/status/'+id);
+    const s = await r.json();
+    logEl.textContent = s.log || ''; logEl.scrollTop = logEl.scrollHeight;
+    if(s.state==='running'){ setState('running','Reconstruction running...'); setTimeout(()=>poll(id),2000); return; }
+    polling=false;
+    if(s.state==='done'){ setState('done','Done'); loadMeshes(s.upper_url, s.lower_url); }
+    else { setState('error','Reconstruction failed (see log)'); }
+    refreshGo();
+  }catch(e){ polling=false; setState('error','Network error: '+e.message); refreshGo(); }
+}
+
+// ---- three.js viewer ----
+const canvas=document.getElementById('canvas');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0f1418);
+const camera=new THREE.PerspectiveCamera(45,1,0.1,5000);
+camera.position.set(0,0,180);
+const controls=new OrbitControls(camera,canvas); controls.enableDamping=true;
+scene.add(new THREE.AmbientLight(0xffffff,0.6));
+const key=new THREE.DirectionalLight(0xffffff,0.8); key.position.set(1,1,1); scene.add(key);
+const rim=new THREE.DirectionalLight(0xffffff,0.4); rim.position.set(-1,-0.5,-1); scene.add(rim);
+const matU=new THREE.MeshPhongMaterial({color:0xf2efe6,shininess:20,side:THREE.DoubleSide});
+const matL=new THREE.MeshPhongMaterial({color:0xd9e6ee,shininess:20,side:THREE.DoubleSide});
+let upperObj=null, lowerObj=null;
+
+function resize(){
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  if(canvas.width!==w||canvas.height!==h){ renderer.setSize(w,h,false);
+    camera.aspect=w/h; camera.updateProjectionMatrix(); }
+}
+function animate(){ resize(); controls.update(); renderer.render(scene,camera); requestAnimationFrame(animate); }
+animate();
+
+const loader=new OBJLoader();
+function loadOne(url,mat){
+  return new Promise((res,rej)=> loader.load(url,obj=>{
+    obj.traverse(c=>{ if(c.isMesh) c.material=mat; }); res(obj);
+  },undefined,rej));
+}
+async function loadMeshes(upperUrl,lowerUrl){
+  if(upperObj) scene.remove(upperObj); if(lowerObj) scene.remove(lowerObj);
+  [upperObj,lowerObj] = await Promise.all([loadOne(upperUrl,matU),loadOne(lowerUrl,matL)]);
+  scene.add(upperObj); scene.add(lowerObj);
+  // frame both
+  const box=new THREE.Box3().setFromObject(upperObj); box.expandByObject(lowerObj);
+  const c=box.getCenter(new THREE.Vector3()), sz=box.getSize(new THREE.Vector3());
+  [upperObj,lowerObj].forEach(o=>o.position.sub(c));
+  const r=Math.max(sz.x,sz.y,sz.z);
+  camera.position.set(0,0,r*2.2); camera.near=r/100; camera.far=r*100; camera.updateProjectionMatrix();
+  controls.target.set(0,0,0); controls.update();
+  document.getElementById('empty').hidden=true;
+  document.getElementById('overlay').hidden=false;
+  document.getElementById('dlUpper').href=upperUrl;
+  document.getElementById('dlLower').href=lowerUrl;
+}
+document.getElementById('tUpper').addEventListener('change',e=>{ if(upperObj) upperObj.visible=e.target.checked; });
+document.getElementById('tLower').addEventListener('change',e=>{ if(lowerObj) lowerObj.visible=e.target.checked; });
+</script>
+</body>
+</html>
