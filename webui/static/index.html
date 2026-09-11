@@ -11,6 +11,7 @@
     --danger:#e0564f;
   }
   *{box-sizing:border-box}
+  [hidden]{display:none!important}
   body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;
        background:var(--bg);color:var(--fg);height:100vh;overflow:hidden}
   .app{display:grid;grid-template-columns:380px 1fr;height:100vh}
@@ -29,6 +30,7 @@
   .slot .lbl{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);
              font-size:11px;padding:2px 4px;z-index:2}
   .slot .ph{color:var(--muted);font-size:11px;padding:6px;z-index:1}
+  .slot.filled .ph{display:none}
   .slot input{display:none}
   .row{display:flex;gap:8px;align-items:center;margin-top:10px}
   select,button{font:inherit}
